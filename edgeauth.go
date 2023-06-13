@@ -8,7 +8,9 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"hash"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -27,13 +29,15 @@ type Config struct {
 	SessionID      string
 	Payload        string
 	Verbose        bool
+	Token          string
+	EscapeEarly    bool
 }
 
 type Client struct {
 	Config *Config
 }
 
-func NewClient(config *Config) *Client {
+func NewClient(config *Config) (*Client, error) {
 	if config.Algo == 0 {
 		config.Algo = crypto.SHA256
 	}
@@ -46,7 +50,15 @@ func NewClient(config *Config) *Client {
 		config.ACLDelimiter = "!"
 	}
 
-	return &Client{config}
+	if config.Token == "" {
+		config.Token = "__token__"
+	}
+
+	if config.Key == "" {
+		return nil, errors.New("you must provide key")
+	}
+
+	return &Client{config}, nil
 }
 
 func createSignature(hasher func() hash.Hash, value string, key []byte) string {
@@ -56,7 +68,20 @@ func createSignature(hasher func() hash.Hash, value string, key []byte) string {
 	return hex.EncodeToString(hm.Sum(nil))
 }
 
-func (c *Client) GenerateToken(path string, isUrl bool) (string, error) {
+func encodePath(path string) string {
+	path = url.QueryEscape(path)
+	path = strings.ToLower(path)
+	return path
+}
+
+func (c *Client) escapeEarly(text string) string {
+	if c.Config.EscapeEarly {
+		return encodePath(text)
+	}
+	return text
+}
+
+func (c *Client) generateToken(path string, isUrl bool) (string, error) {
 	var hasher func() hash.Hash
 
 	switch c.Config.Algo {
@@ -98,10 +123,29 @@ func (c *Client) GenerateToken(path string, isUrl bool) (string, error) {
 		return "", errors.New("end time must be in the future")
 	}
 
+	if c.Config.Verbose {
+		fmt.Println("Akamai Token Generation Parameters")
+		if isUrl {
+			fmt.Println("URL			:", path)
+		} else {
+			fmt.Println("ACL			:", path)
+		}
+		fmt.Println("Start Time		:", c.Config.StartTime.Format(time.RFC3339))
+		fmt.Println("End Time		:", c.Config.EndTime.Format(time.RFC3339))
+		fmt.Println("Duration		:", c.Config.DurationWindow)
+		fmt.Println("Payload		:", c.Config.Payload)
+		fmt.Println("Algo			:", c.Config.Algo)
+		fmt.Println("Salt			:", c.Config.Salt)
+		fmt.Println("FieldDelimiter	:", c.Config.FieldDelimiter)
+		fmt.Println("ACLDelimiter	:", c.Config.ACLDelimiter)
+		fmt.Println("EscapeEarly	:", c.Config.EscapeEarly)
+		fmt.Println("SessionID		:", c.Config.SessionID)
+	}
+
 	query := []string{}
 
 	if c.Config.IP != "" {
-		query = append(query, c.Config.IP)
+		query = append(query, "ip="+c.escapeEarly(c.Config.IP))
 	}
 
 	// Include StartTime only if explicitly given
@@ -116,18 +160,18 @@ func (c *Client) GenerateToken(path string, isUrl bool) (string, error) {
 	}
 
 	if c.Config.SessionID != "" {
-		query = append(query, "id="+c.Config.SessionID)
+		query = append(query, "id="+c.escapeEarly(c.Config.SessionID))
 	}
 
 	if c.Config.Payload != "" {
-		query = append(query, "data="+c.Config.Payload)
+		query = append(query, "data="+c.escapeEarly(c.Config.Payload))
 	}
 
 	hashSource := make([]string, len(query))
 	copy(hashSource, query)
 
 	if isUrl {
-		hashSource = append(hashSource, "url="+path)
+		hashSource = append(hashSource, "url="+c.escapeEarly(path))
 	}
 
 	if c.Config.Salt != "" {
@@ -149,4 +193,23 @@ func (c *Client) GenerateToken(path string, isUrl bool) (string, error) {
 	query = append(query, "hmac="+token)
 
 	return strings.Join(query, c.Config.FieldDelimiter), nil
+}
+
+func (c *Client) GenerateACLToken(acl []string) (string, error) {
+	var path string
+	if len(acl) == 0 {
+		return "", errors.New("you must provide acl(s)")
+	} else if len(acl) == 1 {
+		path = acl[0]
+	} else {
+		path = strings.Join(acl, c.Config.ACLDelimiter)
+	}
+	return c.generateToken(path, false)
+}
+
+func (c *Client) GenerateURLToken(url string) (string, error) {
+	if url == "" {
+		return "", errors.New("you must provide a url")
+	}
+	return c.generateToken(url, true)
 }
