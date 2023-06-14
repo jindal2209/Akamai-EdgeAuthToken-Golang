@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"hash"
 	"net/url"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -68,10 +69,15 @@ func createSignature(hasher func() hash.Hash, value string, key []byte) string {
 	return hex.EncodeToString(hm.Sum(nil))
 }
 
-func encodePath(path string) string {
-	path = url.QueryEscape(path)
-	path = strings.ToLower(path)
-	return path
+func encodePath(text string) string {
+	text = url.QueryEscape(text)
+
+	pattern := regexp.MustCompile(`%..`)
+	text = pattern.ReplaceAllStringFunc(text, func(match string) string {
+		return strings.ToLower(match)
+	})
+
+	return text
 }
 
 func (c *Client) escapeEarly(text string) string {
@@ -92,7 +98,7 @@ func (c *Client) generateToken(path string, isUrl bool) (string, error) {
 	case crypto.MD5:
 		hasher = md5.New
 	default:
-		return "", errors.New("altorithm should be sha256 or sha1 or md5")
+		return "", errors.New("algorithm should be sha256 or sha1 or md5")
 	}
 
 	now := time.Now()
@@ -133,12 +139,12 @@ func (c *Client) generateToken(path string, isUrl bool) (string, error) {
 		fmt.Println("Start Time		:", c.Config.StartTime.Format(time.RFC3339))
 		fmt.Println("End Time		:", c.Config.EndTime.Format(time.RFC3339))
 		fmt.Println("Duration		:", c.Config.DurationWindow)
-		fmt.Println("Payload		:", c.Config.Payload)
+		fmt.Println("Payload			:", c.Config.Payload)
 		fmt.Println("Algo			:", c.Config.Algo)
 		fmt.Println("Salt			:", c.Config.Salt)
-		fmt.Println("FieldDelimiter	:", c.Config.FieldDelimiter)
-		fmt.Println("ACLDelimiter	:", c.Config.ACLDelimiter)
-		fmt.Println("EscapeEarly	:", c.Config.EscapeEarly)
+		fmt.Println("FieldDelimiter		:", c.Config.FieldDelimiter)
+		fmt.Println("ACLDelimiter		:", c.Config.ACLDelimiter)
+		fmt.Println("EscapeEarly		:", c.Config.EscapeEarly)
 		fmt.Println("SessionID		:", c.Config.SessionID)
 	}
 

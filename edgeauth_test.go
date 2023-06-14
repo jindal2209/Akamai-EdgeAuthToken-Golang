@@ -1,77 +1,86 @@
 package edgeauth
 
-// const sampleKey = "52a152a152a152a152a152a152a1"
-// const samplePath = "/this/is/a/test"
+import (
+	"crypto"
+	"regexp"
+	"strconv"
+	"strings"
+	"testing"
+	"time"
+)
 
-// func TestGenerateToken(t *testing.T) {
-// 	config := &Config{
-// 		Algo:           crypto.SHA256,
-// 		Key:            sampleKey,
-// 		StartTime:      time.Now(),
-// 		DurationWindow: 300 * time.Second,
-// 	}
+const sampleKey = "52a152a152a152a152a152a152a1"
+const samplePath = "/this/is/a/test"
 
-// 	client, err := NewClient(config)
+func TestGenerateToken(t *testing.T) {
+	config := &Config{
+		Algo:           crypto.SHA256,
+		Key:            sampleKey,
+		StartTime:      time.Now(),
+		DurationWindow: 300 * time.Second,
+	}
 
-// 	token, err := client.GenerateToken(samplePath, false)
+	client, _ := NewClient(config)
 
-// 	if err != nil {
-// 		t.Error(err.Error())
-// 	}
+	token, err := client.GenerateACLToken([]string{samplePath})
 
-// 	fields := strings.Split(token, config.FieldDelimiter)
+	if err != nil {
+		t.Error(err.Error())
+	}
 
-// 	if len(fields) != 4 {
-// 		t.Error("there should be 4 fields in the token")
-// 	}
+	fields := strings.Split(token, config.FieldDelimiter)
 
-// 	expected := "st=" + strconv.FormatInt(config.StartTime.Unix(), 10)
+	if len(fields) != 4 {
+		t.Error("there should be 4 fields in the token")
+	}
 
-// 	if expected != fields[0] {
-// 		t.Errorf("first field must be equal to `%s`", expected)
-// 	}
+	expected := "st=" + strconv.FormatInt(config.StartTime.Unix(), 10)
 
-// 	endDate := config.StartTime.Add(config.DurationWindow)
-// 	expected = "exp=" + strconv.FormatInt(endDate.Unix(), 10)
+	if expected != fields[0] {
+		t.Errorf("first field must be equal to `%s`", expected)
+	}
 
-// 	if expected != fields[1] {
-// 		t.Errorf("first field must be equal to `%s`", expected)
-// 	}
+	endDate := config.StartTime.Add(config.DurationWindow)
+	expected = "exp=" + strconv.FormatInt(endDate.Unix(), 10)
 
-// 	matched, _ := regexp.MatchString(`acl=.+`, fields[2])
+	if expected != fields[1] {
+		t.Errorf("first field must be equal to `%s`", expected)
+	}
 
-// 	if !matched {
-// 		t.Error("second field must in the form `acl=<path>`")
-// 	}
+	matched, _ := regexp.MatchString(`acl=.+`, fields[2])
 
-// 	matched, _ = regexp.MatchString(`hmac=[a-f][0-9]{64}`, fields[3])
+	if !matched {
+		t.Error("second field must in the form `acl=<path>`")
+	}
 
-// 	if !matched {
-// 		t.Error("third field must in the form `hmac=<hash>`")
-// 	}
+	matched, _ = regexp.MatchString(`hmac=[a-f][0-9]{64}`, fields[3])
 
-// 	t.Log("Token: " + token)
-// }
+	if !matched {
+		t.Error("third field must in the form `hmac=<hash>`")
+	}
 
-// func TestGenerateTokenWithInvalidStartAndEndDate(t *testing.T) {
-// 	expected := "end time must be greater than start time"
+	t.Log("Token: " + token)
+}
 
-// 	config := &Config{
-// 		Algo:      crypto.SHA256,
-// 		Key:       sampleKey,
-// 		StartTime: time.Now().Add(300 * time.Second),
-// 		EndTime:   time.Now(),
-// 	}
+func TestGenerateTokenWithInvalidStartAndEndDate(t *testing.T) {
+	expected := "end time must be greater than start time"
 
-// 	client := NewClient(config)
+	config := &Config{
+		Algo:      crypto.SHA256,
+		Key:       sampleKey,
+		StartTime: time.Now().Add(300 * time.Second),
+		EndTime:   time.Now(),
+	}
 
-// 	_, err := client.GenerateToken(samplePath, false)
+	client, err := NewClient(config)
 
-// 	if err != nil {
-// 		if err.Error() != expected {
-// 			t.Error("error must be " + expected)
-// 		}
-// 	} else {
-// 		t.Error("error must be returned")
-// 	}
-// }
+	_, err = client.GenerateACLToken([]string{samplePath})
+
+	if err != nil {
+		if err.Error() != expected {
+			t.Error("error must be " + expected)
+		}
+	} else {
+		t.Error("error must be returned")
+	}
+}
